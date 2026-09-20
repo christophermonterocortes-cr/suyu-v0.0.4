@@ -130,10 +130,12 @@ private:
     public:
         ElementPtr() {}
         ~ElementPtr() {
-            ElementPtr* next_ptr = next.load();
-
-            if (next_ptr)
-                delete next_ptr;
+            ElementPtr* next_ptr = next.exchange(nullptr);
+            while (next_ptr) {
+                ElementPtr* node_to_delete = next_ptr;
+                next_ptr = node_to_delete->next.exchange(nullptr);
+                delete node_to_delete;
+            }
         }
 
         T current;

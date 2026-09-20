@@ -27,6 +27,7 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
+ChangesAssociations=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=lowest
@@ -41,7 +42,7 @@ Name: "assoc_nsp"; Description: "Associate .nsp files (Nintendo Switch Package)"
 Name: "assoc_xci"; Description: "Associate .xci files (Nintendo Switch Game Card)"; GroupDescription: "File associations:"
 
 [Files]
-Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#SourceDir}\*"; DestDir: "{app}"; Excludes: "*.old,*.tmp,*.pdb"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "dist\suyu.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
@@ -64,4 +65,4 @@ Root: HKA; Subkey: "Software\Classes\suyu.xci\DefaultIcon"; ValueType: string; V
 Root: HKA; Subkey: "Software\Classes\suyu.xci\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: assoc_xci
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent runasoriginaluser

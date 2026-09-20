@@ -135,14 +135,21 @@ void AESCipher<Key>::Transcode(const u8* src, std::size_t size, u8* dest, Op op)
     ASSERT(block_size > 0 && block_size <= int(AesBlockBytes));
 
     const std::size_t whole_block_bytes = size - (size % block_size);
-    int written = 0;
 
     if (whole_block_bytes != 0) {
-        ASSERT(EVP_CipherUpdate(context, dest, &written, src, static_cast<int>(whole_block_bytes)));
+        constexpr std::size_t max_chunk = 1024 * 1024 * 1024; // 1 GiB chunks to avoid signed 32-bit int overflow
+        const std::size_t aligned_chunk = max_chunk - (max_chunk % block_size);
+        std::size_t processed = 0;
 
-        if (std::size_t(written) != whole_block_bytes) {
-            LOG_WARNING(Crypto, "Not all data was processed requested={:016X}, actual={:016X}.",
-                        whole_block_bytes, written);
+        while (processed < whole_block_bytes) {
+            const int chunk_size = static_cast<int>(std::min(whole_block_bytes - processed, aligned_chunk));
+            int written = 0;
+            ASSERT(EVP_CipherUpdate(context, dest + processed, &written, src + processed, chunk_size));
+            if (written != chunk_size) {
+                LOG_WARNING(Crypto, "Not all data was processed requested={:016X}, actual={:016X}.",
+                            chunk_size, written);
+            }
+            processed += chunk_size;
         }
     }
 

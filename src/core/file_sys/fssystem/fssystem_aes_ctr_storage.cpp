@@ -60,6 +60,7 @@ size_t AesCtrStorage::Read(u8* buffer, size_t size, size_t offset) const {
     AddCounter(ctr.data(), IvSize, offset / BlockSize);
 
     // Decrypt.
+    std::lock_guard lock(m_mutex);
     m_cipher->SetIV(ctr);
     m_cipher->Transcode(buffer, size, buffer, Core::Crypto::Op::Decrypt);
 
@@ -91,6 +92,7 @@ size_t AesCtrStorage::Write(const u8* buffer, size_t size, size_t offset) {
     const u8* cur = buffer;
     size_t remaining = size;
     size_t current_offset = offset;
+    std::lock_guard lock(m_mutex);
 
     while (remaining > 0) {
         const size_t write_size = std::min<std::size_t>(pooled_buffer.size(), remaining);

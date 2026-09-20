@@ -1062,10 +1062,15 @@ void RasterizerVulkan::UpdateDynamicStates() {
         // AMD Workaround: LogicOp incompatible with float render targets
         if (device.GetDriverID() == VkDriverIdKHR::VK_DRIVER_ID_AMD_OPEN_SOURCE ||
             device.GetDriverID() == VkDriverIdKHR::VK_DRIVER_ID_AMD_PROPRIETARY) {
-            const auto has_float = std::any_of(
-                regs.vertex_attrib_format.begin(), regs.vertex_attrib_format.end(),
-                [](const auto& attrib) {
-                    return attrib.type == Maxwell3D::Regs::VertexAttribute::Type::Float;
+            const size_t num_rts = std::min(static_cast<size_t>(regs.rt_control.count), regs.rt.size());
+            const bool has_float = std::any_of(
+                regs.rt.begin(), regs.rt.begin() + num_rts,
+                [](const auto& rt) {
+                    if (rt.format == Tegra::RenderTargetFormat::NONE) {
+                        return false;
+                    }
+                    const auto format = VideoCore::Surface::PixelFormatFromRenderTargetFormat(rt.format);
+                    return VideoCore::Surface::IsPixelFormatFloat(format);
                 }
             );
             if (regs.logic_op.enable) {

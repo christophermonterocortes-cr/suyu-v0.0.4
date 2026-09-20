@@ -44,22 +44,47 @@ echo Initializing MSVC environment via:
 echo "%VCVARS%"
 call "%VCVARS%"
 
-:: Tools paths
-set "CMAKE_EXE=C:\Users\CHRISTOPHER\AppData\Local\Microsoft\WinGet\Packages\Kitware.CMake_Microsoft.Winget.Source_8wekyb3d8bbwe\cmake-4.4.3-windows-x86_64\bin\cmake.exe"
-set "NINJA_EXE=C:\Users\CHRISTOPHER\AppData\Local\Microsoft\WinGet\Packages\Ninja-build.Ninja_Microsoft.Winget.Source_8wekyb3d8bbwe\ninja.exe"
-set "QT6_DIR=C:\Users\CHRISTOPHER\Qt\6.7.0\msvc2019_64\lib\cmake\Qt6"
+:: Tools paths auto-detection
+where cmake >nul 2>&1 && (set "CMAKE_EXE=cmake") || (
+    if exist "C:\Users\CHRISTOPHER\AppData\Local\Microsoft\WinGet\Packages\Kitware.CMake_Microsoft.Winget.Source_8wekyb3d8bbwe\cmake-4.4.3-windows-x86_64\bin\cmake.exe" (
+        set "CMAKE_EXE=C:\Users\CHRISTOPHER\AppData\Local\Microsoft\WinGet\Packages\Kitware.CMake_Microsoft.Winget.Source_8wekyb3d8bbwe\cmake-4.4.3-windows-x86_64\bin\cmake.exe"
+    ) else (
+        set "CMAKE_EXE=cmake.exe"
+    )
+)
+
+where ninja >nul 2>&1 && (set "NINJA_EXE=ninja") || (
+    if exist "C:\Users\CHRISTOPHER\AppData\Local\Microsoft\WinGet\Packages\Ninja-build.Ninja_Microsoft.Winget.Source_8wekyb3d8bbwe\ninja.exe" (
+        set "NINJA_EXE=C:\Users\CHRISTOPHER\AppData\Local\Microsoft\WinGet\Packages\Ninja-build.Ninja_Microsoft.Winget.Source_8wekyb3d8bbwe\ninja.exe"
+    ) else (
+        set "NINJA_EXE=ninja.exe"
+    )
+)
+
+if "%QT6_DIR%"=="" (
+    if exist "C:\Users\CHRISTOPHER\Qt\6.7.0\msvc2019_64\lib\cmake\Qt6" (
+        set "QT6_DIR=C:\Users\CHRISTOPHER\Qt\6.7.0\msvc2019_64\lib\cmake\Qt6"
+    ) else if exist "C:\Qt\6.7.0\msvc2019_64\lib\cmake\Qt6" (
+        set "QT6_DIR=C:\Qt\6.7.0\msvc2019_64\lib\cmake\Qt6"
+    )
+)
 
 :: Find Vulkan SDK
-set "VULKAN_SDK=C:\VulkanSDK\1.4.357.0"
-if not exist "%VULKAN_SDK%" (
-    for /d %%D in ("C:\VulkanSDK\*") do (
-        set "VULKAN_SDK=%%D"
+if "%VULKAN_SDK%"=="" (
+    if exist "C:\VulkanSDK\1.4.357.0" (
+        set "VULKAN_SDK=C:\VulkanSDK\1.4.357.0"
+    ) else (
+        for /d %%D in ("C:\VulkanSDK\*") do (
+            set "VULKAN_SDK=%%D"
+        )
     )
 )
 echo Using Vulkan SDK at %VULKAN_SDK%
 
-:: Add required tool directories to PATH
-set "PATH=%VULKAN_SDK%\Bin;C:\Users\CHRISTOPHER\tools\git\cmd;C:\Users\CHRISTOPHER\tools\git\usr\bin;C:\Users\CHRISTOPHER\Qt\6.7.0\msvc2019_64\bin;C:\Users\CHRISTOPHER\AppData\Local\Microsoft\WinGet\Packages\Ninja-build.Ninja_Microsoft.Winget.Source_8wekyb3d8bbwe;%PATH%"
+:: Add required tool directories to PATH (excluding git\usr\bin to prevent shell tool conflicts)
+if exist "C:\Users\CHRISTOPHER\tools\git\cmd" set "PATH=C:\Users\CHRISTOPHER\tools\git\cmd;%PATH%"
+if exist "%VULKAN_SDK%\Bin" set "PATH=%VULKAN_SDK%\Bin;%PATH%"
+if exist "C:\Users\CHRISTOPHER\Qt\6.7.0\msvc2019_64\bin" set "PATH=C:\Users\CHRISTOPHER\Qt\6.7.0\msvc2019_64\bin;%PATH%"
 
 cd /d "%~dp0"
 
@@ -70,24 +95,25 @@ echo ============================================================
     -DCMAKE_BUILD_TYPE=Release ^
     -DENABLE_QT=ON ^
     -DYUZU_USE_BUNDLED_QT=OFF ^
+    -DSUYU_BUILD_PRESET=avx2 ^
     -DQt6_DIR="%QT6_DIR%" ^
     -DCMAKE_MAKE_PROGRAM="%NINJA_EXE%" ^
     -GNinja
 
 if errorlevel 1 (
     echo [ERROR] CMake configuration failed.
-    pause
+    if not defined CI pause
     exit /b %errorlevel%
 )
 
 echo ============================================================
-echo Building suyu and suyu-cmd (using %NUMBER_OF_PROCESSORS% threads)...
+echo Building with Ninja...
 echo ============================================================
-"%CMAKE_EXE%" --build build --target suyu suyu-cmd -j%NUMBER_OF_PROCESSORS%
+"%NINJA_EXE%" -C build -j%NUMBER_OF_PROCESSORS%
 
 if errorlevel 1 (
-    echo [ERROR] Compilation failed.
-    pause
+    echo [ERROR] Build failed.
+    if not defined CI pause
     exit /b %errorlevel%
 )
 
@@ -97,7 +123,18 @@ echo ============================================================
 if not exist "dist_bin" mkdir "dist_bin"
 copy /y "build\bin\suyu.exe" "dist_bin\"
 copy /y "build\bin\suyu-cmd.exe" "dist_bin\"
-"C:\Users\CHRISTOPHER\Qt\6.7.0\msvc2019_64\bin\windeployqt.exe" --release --no-translations "dist_bin\suyu.exe"
+
+set "WINDEPLOYQT_EXE="
+where windeployqt >nul 2>&1 && set "WINDEPLOYQT_EXE=windeployqt"
+if "%WINDEPLOYQT_EXE%"=="" (
+    if exist "C:\Users\CHRISTOPHER\Qt\6.7.0\msvc2019_64\bin\windeployqt.exe" (
+        set "WINDEPLOYQT_EXE=C:\Users\CHRISTOPHER\Qt\6.7.0\msvc2019_64\bin\windeployqt.exe"
+    )
+)
+
+if not "%WINDEPLOYQT_EXE%"=="" (
+    "%WINDEPLOYQT_EXE%" --release --no-translations "dist_bin\suyu.exe"
+)
 
 echo ============================================================
 echo BUILD COMPLETED SUCCESSFULLY!
@@ -105,4 +142,4 @@ echo Executables are located in:
 echo   %~dp0dist_bin\suyu.exe
 echo   %~dp0dist_bin\suyu-cmd.exe
 echo ============================================================
-pause
+if not defined CI pause

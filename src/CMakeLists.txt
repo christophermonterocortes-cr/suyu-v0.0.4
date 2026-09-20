@@ -87,7 +87,6 @@ if (MSVC AND NOT CXX_CLANG)
     # /GT                 - Supports fiber safety for data allocated using static thread-local storage
     add_compile_options(
         /MP
-        /Zm200
         /Zo
         /permissive-
         /EHsc
@@ -126,8 +125,6 @@ if (MSVC AND NOT CXX_CLANG)
         /wd4324 # 'struct_name': structure was padded due to __declspec(align())
         /wd4201 # nonstandard extension used : nameless struct/union
         /wd4702 # unreachable code (when used with LTO)
-
-        $<$<CONFIG:Release>:/GS->   # No stack buffer overflow checks
         /Gy                         # Enable function level linking
         /GR-                        # Disable run time type information
     )

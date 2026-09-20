@@ -429,6 +429,25 @@ bool IsPixelFormatSignedInteger(PixelFormat format) {
     }
 }
 
+bool IsPixelFormatFloat(PixelFormat format) {
+    switch (format) {
+    case PixelFormat::R32G32B32A32_FLOAT:
+    case PixelFormat::R32G32B32_FLOAT:
+    case PixelFormat::R32G32_FLOAT:
+    case PixelFormat::R32_FLOAT:
+    case PixelFormat::R16G16B16A16_FLOAT:
+    case PixelFormat::R16G16B16X16_FLOAT:
+    case PixelFormat::R16G16_FLOAT:
+    case PixelFormat::R16_FLOAT:
+    case PixelFormat::B10G11R11_FLOAT:
+    case PixelFormat::BC6H_UFLOAT:
+    case PixelFormat::BC6H_SFLOAT:
+        return true;
+    default:
+        return false;
+    }
+}
+
 size_t PixelComponentSizeBitsInteger(PixelFormat format) {
     switch (format) {
     case PixelFormat::A8B8G8R8_SINT:

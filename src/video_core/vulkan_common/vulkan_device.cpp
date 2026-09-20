@@ -599,12 +599,13 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR 
     }
 
     sets_per_pool = 64;
+    const bool is_amd_gcn4 = is_amd && !features.shader_float16_int8.shaderFloat16;
     if (is_amd_driver) {
         // AMD drivers need a higher amount of Sets per Pool in certain circumstances like in XC2.
         sets_per_pool = 96;
 
         // Disable VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT on AMD GCN4 and lower as it is broken.
-        if (!features.shader_float16_int8.shaderFloat16) {
+        if (is_amd_gcn4) {
             LOG_WARNING(Render_Vulkan,
                         "AMD GCN4 and earlier have broken VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT");
             has_broken_cube_compatibility = true;
@@ -633,14 +634,12 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR 
         }
     }
 
-    if (extensions.sampler_filter_minmax && is_amd) {
+    if (extensions.sampler_filter_minmax && is_amd_gcn4) {
         // Disable ext_sampler_filter_minmax on AMD GCN4 and lower as it is broken.
-        if (!features.shader_float16_int8.shaderFloat16) {
-            LOG_WARNING(Render_Vulkan,
-                        "AMD GCN4 and earlier have broken VK_EXT_sampler_filter_minmax");
-            RemoveExtension(extensions.sampler_filter_minmax,
-                            VK_EXT_SAMPLER_FILTER_MINMAX_EXTENSION_NAME);
-        }
+        LOG_WARNING(Render_Vulkan,
+                    "AMD GCN4 and earlier have broken VK_EXT_sampler_filter_minmax");
+        RemoveExtension(extensions.sampler_filter_minmax,
+                        VK_EXT_SAMPLER_FILTER_MINMAX_EXTENSION_NAME);
     }
 
     if (features.shader_float16_int8.shaderFloat16 && is_intel_windows) {
@@ -672,6 +671,11 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR 
     if (is_turnip || is_qualcomm) {
         LOG_WARNING(Render_Vulkan, "Driver requires higher-than-reported binding limits");
         properties.properties.limits.maxVertexInputBindings = 32;
+    }
+
+    if (is_amd && Settings::values.dyna_state.GetValue() != Settings::ExtendedDynamicState::Disabled) {
+        LOG_WARNING(Render_Vulkan, "AMD GPU detected — forcing dyna_state=Disabled to prevent driver vertex state crashes");
+        Settings::values.dyna_state.SetValue(Settings::ExtendedDynamicState::Disabled);
     }
 
     const auto dyna_state = Settings::values.dyna_state.GetValue();

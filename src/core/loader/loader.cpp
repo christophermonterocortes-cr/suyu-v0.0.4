@@ -319,6 +319,7 @@ static std::unique_ptr<AppLoader> GetFileLoader(Core::System& system, FileSys::V
 std::unique_ptr<AppLoader> GetLoader(Core::System& system, FileSys::VirtualFile file,
                                      u64 program_id, std::size_t program_index) {
     if (!file) {
+        LOG_CRITICAL(Loader, "GetLoader: file pointer is null!");
         return nullptr;
     }
 

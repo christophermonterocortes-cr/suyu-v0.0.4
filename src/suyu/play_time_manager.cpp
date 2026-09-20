@@ -27,7 +27,7 @@ std::optional<std::filesystem::path> GetCurrentUserPlayTimePath(
         return std::nullopt;
     }
     return Common::FS::GetSuyuPath(Common::FS::SuyuPath::PlayTimeDir) /
-           uuid->RawString().append(".bin");
+           (uuid->RawString() + ".bin");
 }
 
 [[nodiscard]] bool ReadPlayTimeFile(PlayTimeDatabase& out_play_time_db,
@@ -76,6 +76,12 @@ std::optional<std::filesystem::path> GetCurrentUserPlayTimePath(
         return false;
     }
 
+    if (!Common::FS::CreateDirs(filename->parent_path())) {
+        LOG_ERROR(Frontend, "Failed to create play time directory: {}",
+                  Common::FS::PathToUTF8String(filename->parent_path()));
+        return false;
+    }
+
     Common::FS::IOFile file{filename.value(), Common::FS::FileAccessMode::Write,
                             Common::FS::FileType::BinaryFile};
     if (!file.IsOpen()) {
@@ -112,6 +118,7 @@ PlayTimeManager::~PlayTimeManager() {
 }
 
 void PlayTimeManager::SetProgramId(u64 program_id) {
+    std::scoped_lock lock{mutex};
     running_program_id = program_id;
 }
 
@@ -141,7 +148,11 @@ void PlayTimeManager::AutoTimestamp(std::stop_token stop_token) {
     while (!stop_token.stop_requested()) {
         Common::StoppableTimedWait(stop_token, 30s);
 
-        database[running_program_id] += GetDuration();
+        const auto duration = GetDuration();
+        {
+            std::scoped_lock lock{mutex};
+            database[running_program_id] += duration;
+        }
         Save();
     }
 }
@@ -150,12 +161,18 @@ void PlayTimeManager::Save() {
     if (!manager) {
         return;
     }
-    if (!WritePlayTimeFile(database, *manager)) {
+    PlayTimeDatabase db_copy;
+    {
+        std::scoped_lock lock{mutex};
+        db_copy = database;
+    }
+    if (!WritePlayTimeFile(db_copy, *manager)) {
         LOG_ERROR(Frontend, "Failed to update play time database!");
     }
 }
 
 u64 PlayTimeManager::GetPlayTime(u64 program_id) const {
+    std::scoped_lock lock{mutex};
     auto it = database.find(program_id);
     if (it != database.end()) {
         return it->second;
@@ -165,7 +182,10 @@ u64 PlayTimeManager::GetPlayTime(u64 program_id) const {
 }
 
 void PlayTimeManager::ResetProgramPlayTime(u64 program_id) {
-    database.erase(program_id);
+    {
+        std::scoped_lock lock{mutex};
+        database.erase(program_id);
+    }
     Save();
 }
 

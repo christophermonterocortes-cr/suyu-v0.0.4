@@ -58,6 +58,8 @@ size_t AesXtsStorage::Read(u8* buffer, size_t size, size_t offset) const {
     std::memcpy(ctr.data(), m_iv.data(), IvSize);
     AddCounter(ctr.data(), IvSize, offset / m_block_size);
 
+    std::lock_guard lock(m_mutex);
+
     // Handle any unaligned data before the start; then read said data into a local pooled
     // buffer that resides on the stack, do not use the global memory allocator this is a
     // very tiny (512 bytes) buffer so should be fine to keep on the stack (Nca::XtsBlockSize wide buffer)

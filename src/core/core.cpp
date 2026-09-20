@@ -103,7 +103,11 @@ FileSys::VirtualFile GetGameFileFromPath(const FileSys::VirtualFilesystem& vfs,
         return vfs->OpenFile(path + "/main", FileSys::OpenMode::Read);
     }
 
-    return vfs->OpenFile(path, FileSys::OpenMode::Read);
+    auto res = vfs->OpenFile(path, FileSys::OpenMode::Read);
+    if (!res) {
+        LOG_CRITICAL(Core, "GetGameFileFromPath: OpenFile returned null for '{}'", path);
+    }
+    return res;
 }
 
 struct System::Impl {

@@ -1,6 +1,6 @@
 import os, tarfile, shutil
 
-base_dir = r"C:\Users\CHRISTOPHER\Downloads\suyu-v0.0.4"
+base_dir = os.path.dirname(os.path.abspath(__file__))
 linux_installer_dir = os.path.join(base_dir, "installers", "linux")
 package_root = os.path.join(linux_installer_dir, "suyu-v0.0.4-linux-x64")
 
@@ -158,8 +158,13 @@ with open(os.path.join(package_root, "uninstall.sh"), "w", encoding="utf-8", new
 
 # 5. Pack into suyu-v0.0.4-linux-x64-installer.tar.gz
 installer_tar = os.path.join(linux_installer_dir, "suyu-v0.0.4-linux-x64-installer.tar.gz")
+def set_permissions(tarinfo):
+    if tarinfo.name.endswith(".sh") or "/bin/" in tarinfo.name or tarinfo.name.endswith("suyu") or tarinfo.name.endswith("suyu-cmd"):
+        tarinfo.mode = 0o755
+    return tarinfo
+
 print("Packaging suyu-v0.0.4-linux-x64-installer.tar.gz...")
 with tarfile.open(installer_tar, "w:gz") as tar:
-    tar.add(package_root, arcname="suyu-v0.0.4-linux-x64")
+    tar.add(package_root, arcname="suyu-v0.0.4-linux-x64", filter=set_permissions)
 
 print(f"Linux installer ready: {installer_tar} ({os.path.getsize(installer_tar)/(1024*1024):.1f} MB)")

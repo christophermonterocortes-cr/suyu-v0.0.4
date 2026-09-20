@@ -223,7 +223,7 @@ std::vector<Network::NetworkInterface> GetAvailableNetworkInterfaces() {
 std::optional<Network::NetworkInterface> GetSelectedNetworkInterface() {
     auto const& sel_if = Settings::values.network_interface.GetValue();
     if (auto const ifaces = Network::GetAvailableNetworkInterfaces(); ifaces.size() > 0) {
-        if (sel_if.empty())
+        if (sel_if.empty() || sel_if == "None")
             return ifaces[0];
         if (auto const res = std::ranges::find_if(ifaces, [&sel_if](const auto& iface) {
             return iface.name == sel_if;

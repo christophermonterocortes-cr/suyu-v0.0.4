@@ -12,7 +12,9 @@
 #include <algorithm>
 #include <bit>
 #include <cstring>
+#include <functional>
 #include <mutex>
+#include <shared_mutex>
 #include <vector>
 
 #include "common/assert.h"
@@ -184,18 +186,19 @@ struct VehRegion {
     const std::function<FakeCall(u64)>* cb;
 };
 
-std::mutex veh_mutex;
+std::shared_mutex veh_mutex;
 std::vector<VehRegion> veh_regions;
+PVOID veh_handle = nullptr;
 bool veh_installed = false;
 
 LONG CALLBACK FastmemVectoredHandler(EXCEPTION_POINTERS* ep);
 
 void EnsureVehInstalled() {
-    // Caller holds veh_mutex.
+    // Caller holds exclusive veh_mutex.
     if (!veh_installed) {
         // First = 1 so we run before other handlers and before any SEH dispatch.
-        AddVectoredExceptionHandler(1, FastmemVectoredHandler);
-        veh_installed = true;
+        veh_handle = AddVectoredExceptionHandler(1, FastmemVectoredHandler);
+        veh_installed = (veh_handle != nullptr);
     }
 }
 
@@ -249,7 +252,7 @@ struct ExceptionHandler::Impl final {
     }
 
     void SetCallback(std::function<FakeCall(u64)> new_cb) {
-        std::scoped_lock lock{veh_mutex};
+        std::unique_lock lock{veh_mutex};
         cb = std::move(new_cb);
         if (cb) {
             EnsureVehInstalled();
@@ -260,13 +263,23 @@ struct ExceptionHandler::Impl final {
             }
         } else {
             std::erase_if(veh_regions, [this](const VehRegion& r) { return r.cb == &cb; });
+            if (veh_regions.empty() && veh_installed && veh_handle) {
+                RemoveVectoredExceptionHandler(veh_handle);
+                veh_handle = nullptr;
+                veh_installed = false;
+            }
         }
     }
 
     ~Impl() {
         {
-            std::scoped_lock lock{veh_mutex};
+            std::unique_lock lock{veh_mutex};
             std::erase_if(veh_regions, [this](const VehRegion& r) { return r.cb == &cb; });
+            if (veh_regions.empty() && veh_installed && veh_handle) {
+                RemoveVectoredExceptionHandler(veh_handle);
+                veh_handle = nullptr;
+                veh_installed = false;
+            }
         }
         RtlDeleteFunctionTable(rfuncs);
     }
@@ -282,6 +295,17 @@ private:
 
 namespace {
 
+static bool TryPushAndRedirect(PCONTEXT ctx, u64 ret_rip, u64 call_rip) {
+    __try {
+        ctx->Rsp -= sizeof(u64);
+        *reinterpret_cast<u64*>(ctx->Rsp) = ret_rip;
+        ctx->Rip = call_rip;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 LONG CALLBACK FastmemVectoredHandler(EXCEPTION_POINTERS* ep) {
     if (!ep || !ep->ExceptionRecord || !ep->ContextRecord) {
         return EXCEPTION_CONTINUE_SEARCH;
@@ -293,17 +317,17 @@ LONG CALLBACK FastmemVectoredHandler(EXCEPTION_POINTERS* ep) {
     PCONTEXT ctx = ep->ContextRecord;
     const u64 rip = ctx->Rip;
 
-    std::scoped_lock lock{veh_mutex};
+    std::shared_lock lock{veh_mutex};
     for (const VehRegion& region : veh_regions) {
         if (rip >= region.begin && rip < region.end) {
             const FakeCall fc = (*region.cb)(rip);
             // Emulate a call: push the resume address, then jump to the fallback thunk.
             // Applied directly from the vectored handler via NtContinue, without ever
             // entering the (broken) SEH language-handler dispatch path.
-            ctx->Rsp -= sizeof(u64);
-            *std::bit_cast<u64*>(ctx->Rsp) = fc.ret_rip;
-            ctx->Rip = fc.call_rip;
-            return EXCEPTION_CONTINUE_EXECUTION;
+            if (TryPushAndRedirect(ctx, fc.ret_rip, fc.call_rip)) {
+                return EXCEPTION_CONTINUE_EXECUTION;
+            }
+            return EXCEPTION_CONTINUE_SEARCH;
         }
     }
     return EXCEPTION_CONTINUE_SEARCH;

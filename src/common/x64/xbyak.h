@@ -263,8 +263,8 @@ enum {
 };
 
 constexpr bool IsWithin2G(uintptr_t ref, uintptr_t target) noexcept {
-    u64 const distance = target - (ref + 5);
-    return (distance & 0xffff'ffff) == distance;
+    const auto diff = static_cast<std::int64_t>(target) - static_cast<std::int64_t>(ref + 5);
+    return diff >= -0x80000000LL && diff <= 0x7FFFFFFFLL;
 }
 
 template <typename T>

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <exception>
 #include <fstream>
@@ -886,7 +887,7 @@ int main(int argc, char** argv) {
                          "additional help.\n\nError Code: {:04X}-{:04X}\nError Description: {}",
                          loader_id, error_id, static_cast<Loader::ResultStatus>(error_id));
         }
-        break;
+        return -1;
     }
 
     if (use_multiplayer) {
@@ -931,9 +932,12 @@ int main(int argc, char** argv) {
         }
     }
 
+    std::atomic<bool> exit_requested{false};
     system.RegisterExitCallback([&] {
-        // Just exit right away.
-        exit(0);
+        exit_requested = true;
+        SDL_Event event;
+        event.type = SDL_EVENT_QUIT;
+        SDL_PushEvent(&event);
     });
 
 #ifdef __unix__
@@ -944,7 +948,7 @@ int main(int argc, char** argv) {
     if (system.DebuggerEnabled()) {
         system.InitializeDebugger();
     }
-    while (emu_window->IsOpen()) {
+    while (emu_window->IsOpen() && !exit_requested) {
         emu_window->WaitEvent();
     }
     system.DetachDebugger();

@@ -3,7 +3,7 @@
 
 cmake_minimum_required(VERSION 3.22)
 
-project(yuzu)
+project(suyu VERSION 0.0.4 LANGUAGES C CXX)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMakeModules")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMakeModules/find")
@@ -268,6 +268,12 @@ endif()
 
 option(YUZU_USE_BUNDLED_OPENSSL "Download bundled OpenSSL build" ${DEFAULT_YUZU_USE_BUNDLED_OPENSSL})
 
+# Synchronize SUYU_ and YUZU_ bundled option names for downstream subdirectories
+set(SUYU_USE_BUNDLED_QT ${YUZU_USE_BUNDLED_QT})
+set(SUYU_USE_BUNDLED_FFMPEG ${YUZU_USE_BUNDLED_FFMPEG})
+set(SUYU_USE_BUNDLED_SDL3 ${YUZU_USE_BUNDLED_SDL3})
+set(SUYU_USE_BUNDLED_SDL2 ${YUZU_USE_BUNDLED_SDL2})
+
 if (ANDROID AND YUZU_DOWNLOAD_ANDROID_VVL)
     AddJsonPackage(vulkan-validation-layers)
 
@@ -348,6 +354,13 @@ if (CXX_GCC OR CXX_CLANG)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=${march} -mtune=${mtune}")
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=${march} -mtune=${mtune}")
     endif()
+elseif (MSVC AND NOT CXX_CLANG)
+    if (ARCHITECTURE_x86_64)
+        set(SUYU_BUILD_PRESET "custom" CACHE STRING "Build preset to use. One of: custom, generic, avx2, native")
+        if (SUYU_BUILD_PRESET STREQUAL "avx2" OR SUYU_BUILD_PRESET STREQUAL "v3" OR SUYU_BUILD_PRESET STREQUAL "zen2" OR SUYU_BUILD_PRESET STREQUAL "zen4" OR SUYU_BUILD_PRESET STREQUAL "native")
+            add_compile_options(/arch:AVX2)
+        endif()
+    endif()
 endif()
 
 # Configure C++ standard
@@ -355,6 +368,7 @@ endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Output binaries to bin/
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
@@ -709,11 +723,11 @@ if (ENABLE_DEBUG_TOOLS)
     add_subdirectory(tools/maxwell-ir)
 endif()
 
-# Set yuzu project or yuzu-cmd project as default StartUp Project in Visual Studio depending on whether QT is enabled or not
+# Set suyu project or suyu-cmd project as default StartUp Project in Visual Studio depending on whether QT is enabled or not
 if(ENABLE_QT)
-    set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT yuzu)
+    set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT suyu)
 else()
-    set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT yuzu-cmd)
+    set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT suyu-cmd)
 endif()
 
 # Installation instructions

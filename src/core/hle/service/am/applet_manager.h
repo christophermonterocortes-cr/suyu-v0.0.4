@@ -61,6 +61,7 @@ private:
 
     FrontendAppletParameters m_pending_parameters{};
     std::unique_ptr<Process> m_pending_process{};
+    bool m_exit_requested{false};
 };
 
 } // namespace Service::AM

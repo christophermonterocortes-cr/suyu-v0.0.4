@@ -180,7 +180,7 @@ struct FixedPipelineState {
 
         void Refresh(const Maxwell& regs);
         void Refresh2(const Maxwell& regs, Maxwell::PrimitiveTopology topology,
-                      bool base_features_supported);
+                      bool has_extended_dynamic_state_2, bool has_extended_dynamic_state_2_logic_op);
         void Refresh3(const Maxwell& regs, const DynamicFeatures& features);
 
         Maxwell::ComparisonOp DepthTestFunc() const noexcept {

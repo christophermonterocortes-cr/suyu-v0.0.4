@@ -237,8 +237,9 @@ void FixedPipelineState::Refresh(Tegra::Engines::Maxwell3D& maxwell3d, DynamicFe
             return static_cast<u16>(array.stride.Value());
         });
     }
-    if (!extended_dynamic_state_2_logic_op) {
-        dynamic_state.Refresh2(regs, topology_, extended_dynamic_state_2);
+    if (!extended_dynamic_state_2 || !extended_dynamic_state_2_logic_op) {
+        dynamic_state.Refresh2(regs, topology_, extended_dynamic_state_2,
+                               extended_dynamic_state_2_logic_op);
     }
     if (!extended_dynamic_state_3_blend) {
         if (maxwell3d.dirty.flags[Dirty::Blending]) {
@@ -341,10 +342,13 @@ void FixedPipelineState::DynamicState::Refresh(const Maxwell& regs) {
 
 void FixedPipelineState::DynamicState::Refresh2(const Maxwell& regs,
                                                 Maxwell::PrimitiveTopology topology_,
-                                                bool base_features_supported) {
-    logic_op.Assign(PackLogicOp(regs.logic_op.op));
+                                                bool has_extended_dynamic_state_2,
+                                                bool has_extended_dynamic_state_2_logic_op) {
+    if (!has_extended_dynamic_state_2_logic_op) {
+        logic_op.Assign(PackLogicOp(regs.logic_op.op));
+    }
 
-    if (base_features_supported) {
+    if (has_extended_dynamic_state_2) {
         return;
     }
 

@@ -137,13 +137,19 @@ if (SUYU_CMD OR YUZU_CMD)
         endif()
 
         if(WIN32)
-            # compile as a win32 gui application instead of a console application
             if(MSVC)
-                set_target_properties(${_t} PROPERTIES LINK_FLAGS_RELEASE "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup")
+                if(_standalone)
+                    set_target_properties(${_t} PROPERTIES LINK_FLAGS_RELEASE "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup")
+                else()
+                    set_target_properties(${_t} PROPERTIES LINK_FLAGS_RELEASE "/SUBSYSTEM:CONSOLE")
+                endif()
             elseif(MINGW)
-                set_target_properties(${_t} PROPERTIES LINK_FLAGS_RELEASE "-Wl,--subsystem,windows")
+                if(_standalone)
+                    set_target_properties(${_t} PROPERTIES LINK_FLAGS_RELEASE "-Wl,--subsystem,windows")
+                else()
+                    set_target_properties(${_t} PROPERTIES LINK_FLAGS_RELEASE "-Wl,--subsystem,console")
+                endif()
             endif()
-            target_link_libraries(${_t} PRIVATE ${PLATFORM_LIBRARIES} Threads::Threads)  # Fixed typo: yuzu-cmd -> suyu-cmd
         endif()
 
         if (MSVC AND SUYU_USE_BUNDLED_SDL3)

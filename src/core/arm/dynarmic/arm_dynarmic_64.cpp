@@ -352,6 +352,9 @@ void ArmDynarmic64::MakeJit(Common::PageTable* page_table, std::size_t address_s
         config.fastmem_pointer = std::nullopt;
         config.fastmem_exclusive_access = false;
     }
+    if (!Settings::values.cpuopt_fastmem_exclusives.GetValue()) {
+        config.fastmem_exclusive_access = false;
+    }
     m_jit.emplace(config);
 }
 

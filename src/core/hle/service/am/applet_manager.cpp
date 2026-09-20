@@ -244,10 +244,14 @@ void AppletManager::CreateAndInsertByFrontendAppletParameters(
 }
 
 void AppletManager::RequestExit() {
-    std::scoped_lock lk{m_lock};
-    if (m_window_system) {
-        m_window_system->OnExitRequested();
+    {
+        std::scoped_lock lk{m_lock};
+        m_exit_requested = true;
+        if (m_window_system) {
+            m_window_system->OnExitRequested();
+        }
     }
+    m_cv.notify_all();
 }
 
 void AppletManager::OperationModeChanged() {
@@ -266,7 +270,11 @@ void AppletManager::SetWindowSystem(WindowSystem* window_system) {
     }
 
     LOG_INFO(Service_AM, "SetWindowSystem: waiting for pending process");
-    m_cv.wait(lk, [&] { return m_pending_process != nullptr; });
+    m_cv.wait(lk, [&] { return m_pending_process != nullptr || m_exit_requested; });
+    if (m_exit_requested || !m_pending_process) {
+        LOG_INFO(Service_AM, "SetWindowSystem: exit requested or no pending process");
+        return;
+    }
     LOG_INFO(Service_AM, "SetWindowSystem: pending process arrived");
 
     if (Settings::values.enable_overlay && m_window_system->GetOverlayDisplayApplet() == nullptr) {

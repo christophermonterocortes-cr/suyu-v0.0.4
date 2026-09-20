@@ -300,6 +300,9 @@ void ArmDynarmic32::MakeJit(Common::PageTable* page_table) {
         config.fastmem_pointer = std::nullopt;
         config.fastmem_exclusive_access = false;
     }
+    if (!Settings::values.cpuopt_fastmem_exclusives.GetValue()) {
+        config.fastmem_exclusive_access = false;
+    }
     m_jit.emplace(config);
 }
 

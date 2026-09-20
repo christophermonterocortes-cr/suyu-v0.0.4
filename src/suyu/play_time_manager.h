@@ -6,6 +6,7 @@
 #include <QString>
 
 #include <map>
+#include <mutex>
 
 #include "common/common_funcs.h"
 #include "common/common_types.h"
@@ -40,6 +41,7 @@ private:
     void AutoTimestamp(std::stop_token stop_token);
     void Save();
 
+    mutable std::mutex mutex;
     PlayTimeDatabase database;
     u64 running_program_id{};
     std::jthread play_time_thread;

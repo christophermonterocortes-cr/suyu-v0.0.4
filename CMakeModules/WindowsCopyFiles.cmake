@@ -22,6 +22,6 @@ function(windows_copy_files TARGET SOURCE_DIR DEST_DIR)
     # so trick it into thinking the command was successful with the || cmd /c "exit /b 0"
     add_custom_command(TARGET ${TARGET} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory ${DEST_DIR}
-        COMMAND robocopy ${SOURCE_DIR} ${DEST_DIR} ${ARGN} /NJH /NJS /NDL /NFL /NC /NS /NP || cmd /c "exit /b 0"
+        COMMAND robocopy ${SOURCE_DIR} ${DEST_DIR} ${ARGN} /R:3 /W:1 /NJH /NJS /NDL /NFL /NC /NS /NP || cmd /c "exit /b 0"
     )
 endfunction()

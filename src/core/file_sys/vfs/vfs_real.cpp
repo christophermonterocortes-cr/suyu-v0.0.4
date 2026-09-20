@@ -93,6 +93,7 @@ VirtualFile RealVfsFilesystem::OpenFileFromEntry(std::string_view path_, std::op
     }
 
     if (!size && !FS::IsFile(path)) {
+        LOG_CRITICAL(Common_Filesystem, "OpenFileFromEntry: FS::IsFile failed for path='{}' (raw='{}')", path, path_);
         return nullptr;
     }
 

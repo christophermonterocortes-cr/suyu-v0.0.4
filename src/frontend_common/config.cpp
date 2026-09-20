@@ -837,9 +837,9 @@ void Config::WriteDoubleSetting(const std::string& key, const double& value,
 void Config::WriteStringSetting(const std::string& key, const std::string& value,
                                 const std::optional<std::string>& default_value,
                                 const std::optional<bool>& use_global) {
-    std::optional string_default = default_value;
+    std::optional<std::string> string_default = std::nullopt;
     if (default_value.has_value()) {
-        string_default.value().append(AdjustOutputString(default_value.value()));
+        string_default = AdjustOutputString(default_value.value());
     }
     WritePreparedSetting(key, AdjustOutputString(value), string_default, use_global);
 }

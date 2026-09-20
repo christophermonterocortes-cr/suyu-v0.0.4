@@ -487,7 +487,7 @@ Result NcaFileSystemDriver::CreateAesXtsStorage(VirtualFile* out, VirtualFile ba
     R_UNLESS(aligned_storage != nullptr, ResultAllocationMemoryFailedAllocateShared);
 
     // Set the out storage.
-    *out = std::move(xts_storage);
+    *out = std::move(aligned_storage);
     R_SUCCEED();
 }
 

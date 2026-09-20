@@ -219,6 +219,7 @@ bool IsPixelFormatETC2(PixelFormat format);
 bool IsPixelFormatSRGB(PixelFormat format);
 bool IsPixelFormatInteger(PixelFormat format);
 bool IsPixelFormatSignedInteger(PixelFormat format);
+bool IsPixelFormatFloat(PixelFormat format);
 size_t PixelComponentSizeBitsInteger(PixelFormat format);
 std::pair<u32, u32> GetASTCBlockSize(PixelFormat format);
 u64 TranscodedAstcSize(u64 base_size, PixelFormat format);

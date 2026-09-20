@@ -2373,7 +2373,8 @@ void GMainWindow::BootGame(const QString& filename, Service::AM::FrontendAppletP
             std::filesystem::path{Common::U16StringFromBuffer(filename.utf16(), filename.size())}
                 .filename());
     }
-    const bool is_64bit = system->Kernel().ApplicationProcess()->Is64Bit();
+    const auto* app_process = system->Kernel().ApplicationProcess();
+    const bool is_64bit = app_process ? app_process->Is64Bit() : true;
     const auto instruction_set_suffix = is_64bit ? tr("(64-bit)") : tr("(32-bit)");
     title_name = tr("%1 %2", "%1 is the title name. %2 indicates if the title is 64-bit or 32-bit")
                      .arg(QString::fromStdString(title_name), instruction_set_suffix)
@@ -7270,7 +7271,7 @@ void GMainWindow::MigrateConfigFiles() {
 
     for (auto it = config_dir_list.constBegin(); it != config_dir_list.constEnd(); ++it) {
         const auto filename = it->toStdString();
-        if (filename.find_first_not_of("0123456789abcdefACBDEF", 0) < 16) {
+        if (filename.find_first_not_of("0123456789abcdefABCDEF", 0) < 16) {
             continue;
         }
         const auto origin = config_dir_fs_path / filename;
