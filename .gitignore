@@ -83,3 +83,5 @@ vcpkg_installed/
 /smash_test.png
 /smash_test3.png
 /search_results.csv
+
+!/installers/**
