@@ -600,6 +600,10 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR 
 
     sets_per_pool = 64;
     const bool is_amd_gcn4 = is_amd && !features.shader_float16_int8.shaderFloat16;
+    if (is_amd && Settings::values.dyna_state.GetValue() != Settings::ExtendedDynamicState::Disabled) {
+        LOG_WARNING(Render_Vulkan, "AMD GPU detected — automatically forcing dyna_state=Disabled for driver stability");
+        Settings::values.dyna_state.SetValue(Settings::ExtendedDynamicState::Disabled);
+    }
     if (is_amd_driver) {
         // AMD drivers need a higher amount of Sets per Pool in certain circumstances like in XC2.
         sets_per_pool = 96;

@@ -132,29 +132,139 @@ void SetCurrentThreadName(const char* name) {
 #endif
 }
 
+void SetCurrentThreadHighQoS() {
+#ifdef _WIN32
+    using PFN_SetThreadInformation = BOOL(WINAPI*)(HANDLE, THREAD_INFORMATION_CLASS, PVOID, DWORD);
+    static auto pfn_SetThreadInformation = reinterpret_cast<PFN_SetThreadInformation>(
+        GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "SetThreadInformation"));
+    if (pfn_SetThreadInformation) {
+        constexpr THREAD_INFORMATION_CLASS ThreadPowerThrottlingClass = static_cast<THREAD_INFORMATION_CLASS>(1);
+        struct {
+            ULONG Version;
+            ULONG ControlMask;
+            ULONG StateMask;
+        } throttling_state{
+            1, // THREAD_POWER_THROTTLING_CURRENT_VERSION
+            1, // THREAD_POWER_THROTTLING_EXECUTION_SPEED
+            0, // StateMask = 0 disables power throttling, enforcing maximum speed
+        };
+        pfn_SetThreadInformation(GetCurrentThread(), ThreadPowerThrottlingClass, &throttling_state, sizeof(throttling_state));
+    }
+#endif
+}
+
+uint64_t GetPerformanceCoresAffinityMask() {
+#ifdef _WIN32
+    static uint64_t cached_mask = 0;
+    if (cached_mask != 0) {
+        return cached_mask;
+    }
+
+    DWORD length = 0;
+    GetLogicalProcessorInformationEx(RelationProcessorCore, nullptr, &length);
+    if (length == 0) {
+        cached_mask = ~0ULL;
+        return cached_mask;
+    }
+
+    std::vector<u8> buffer(length);
+    if (!GetLogicalProcessorInformationEx(RelationProcessorCore,
+            reinterpret_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>(buffer.data()), &length)) {
+        cached_mask = ~0ULL;
+        return cached_mask;
+    }
+
+    uint64_t p_core_mask = 0;
+    uint64_t all_core_mask = 0;
+    u8 max_efficiency_class = 0;
+
+    DWORD offset = 0;
+    while (offset < length) {
+        auto* info = reinterpret_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>(buffer.data() + offset);
+        if (info->Relationship == RelationProcessorCore) {
+            if (info->Processor.EfficiencyClass > max_efficiency_class) {
+                max_efficiency_class = info->Processor.EfficiencyClass;
+            }
+        }
+        offset += info->Size;
+    }
+
+    offset = 0;
+    while (offset < length) {
+        auto* info = reinterpret_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>(buffer.data() + offset);
+        if (info->Relationship == RelationProcessorCore) {
+            for (WORD i = 0; i < info->Processor.GroupCount; ++i) {
+                const auto group_mask = static_cast<uint64_t>(info->Processor.GroupMask[i].Mask);
+                all_core_mask |= group_mask;
+                if (max_efficiency_class > 0 && info->Processor.EfficiencyClass == max_efficiency_class) {
+                    p_core_mask |= group_mask;
+                }
+            }
+        }
+        offset += info->Size;
+    }
+
+    cached_mask = (p_core_mask != 0) ? p_core_mask : all_core_mask;
+    return cached_mask;
+#else
+    return ~0ULL;
+#endif
+}
+
+void SetCurrentThreadPerformanceAffinity() {
+#if defined(_WIN32)
+    SetCurrentThreadHighQoS();
+    const uint64_t mask = GetPerformanceCoresAffinityMask();
+    if (mask != 0 && mask != ~0ULL) {
+        SetThreadAffinityMask(GetCurrentThread(), static_cast<DWORD_PTR>(mask));
+    }
+#endif
+}
+
 void PinCurrentThreadToPerformanceCore(size_t core_id) {
     ASSERT(core_id < 4);
-    // If we set a flag for a CPU that doesn't exist, the thread may not be allowed to
-    // run in ANY processor!
+#if defined(_WIN32)
+    SetCurrentThreadHighQoS();
+    const uint64_t p_cores = GetPerformanceCoresAffinityMask();
+    if (p_cores != 0 && p_cores != ~0ULL) {
+        std::vector<DWORD> p_core_indices;
+        for (DWORD i = 0; i < 64; ++i) {
+            if (p_cores & (1ULL << i)) {
+                p_core_indices.push_back(i);
+            }
+        }
+        if (!p_core_indices.empty()) {
+            const size_t step = (p_core_indices.size() >= 8) ? 2 : 1;
+            const size_t target_idx = (core_id * step) % p_core_indices.size();
+            const DWORD cpu_idx = p_core_indices[target_idx];
+            SetThreadAffinityMask(GetCurrentThread(), static_cast<DWORD_PTR>(1ULL << cpu_idx));
+            return;
+        }
+    }
     auto const total_cores = std::thread::hardware_concurrency();
     if (core_id < total_cores) {
-#if defined(__ANDROID__)
+        DWORD_PTR set = 1ULL << core_id;
+        SetThreadAffinityMask(GetCurrentThread(), set);
+    }
+#elif defined(__ANDROID__)
+    auto const total_cores = std::thread::hardware_concurrency();
+    if (core_id < total_cores) {
         cpu_set_t set;
         CPU_ZERO(&set);
         CPU_SET(core_id, &set);
         sched_setaffinity(pthread_self(), sizeof(set), &set);
+    }
 #elif defined(__linux__) || defined(__FreeBSD__)
+    auto const total_cores = std::thread::hardware_concurrency();
+    if (core_id < total_cores) {
         cpu_set_t set;
         CPU_ZERO(&set);
         CPU_SET(core_id, &set);
         pthread_setaffinity_np(pthread_self(), sizeof(set), &set);
-#elif defined(_WIN32)
-        DWORD set = 1UL << core_id;
-        SetThreadAffinityMask(GetCurrentThread(), set);
-#else
-        // No pin functionality implemented
-#endif
     }
+#else
+    // No pin functionality implemented
+#endif
 }
 
 #ifdef ARCHITECTURE_x86_64

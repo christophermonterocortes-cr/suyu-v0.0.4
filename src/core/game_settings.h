@@ -44,7 +44,8 @@ enum class GPUVendor {
 };
 
 enum class TitleID : std::uint64_t {
-    NinjaGaidenRagebound = 0x0100781020710000ULL
+    NinjaGaidenRagebound = 0x0100781020710000ULL,
+    TearsOfTheKingdom = 0x0100F2C0115B6000ULL,
 };
 
 struct EnvironmentInfo {

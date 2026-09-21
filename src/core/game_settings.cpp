@@ -126,6 +126,32 @@ void LoadOverrides(std::uint64_t program_id, const VideoCore::RendererBase& rend
         case TitleID::NinjaGaidenRagebound:
             Settings::values.use_squashed_iterated_blend = true;
             break;
+        case TitleID::TearsOfTheKingdom: {
+            LOG_INFO(Core, "TotK: Applying Tears of the Kingdom 4K performance auto-tuning profile");
+            if (Settings::values.resolution_setup.GetValue() > Settings::ResolutionSetup::Res2X) {
+                LOG_WARNING(Core, "TotK: Clamping resolution setup from 3X+ (6K) down to 2X (4K UHD) to prevent fillrate collapse");
+                Settings::values.resolution_setup.SetValue(Settings::ResolutionSetup::Res2X);
+            }
+            if (Settings::values.memory_layout_mode.GetValue() == Settings::MemoryLayout::Memory_4Gb) {
+                LOG_INFO(Core, "TotK: Automatically enabling 6GB Extended DRAM layout");
+                Settings::values.memory_layout_mode.SetValue(Settings::MemoryLayout::Memory_6Gb);
+            }
+            if (Settings::values.gpu_accuracy.GetValue() == Settings::GpuAccuracy::High) {
+                LOG_INFO(Core, "TotK: Automatically setting GPU accuracy to Normal for high framerate");
+                Settings::values.gpu_accuracy.SetValue(Settings::GpuAccuracy::Low);
+            }
+            if (Settings::values.renderer_force_max_clock.GetValue()) {
+                LOG_INFO(Core, "TotK: Disabling renderer_force_max_clock compute contention loop");
+                Settings::values.renderer_force_max_clock.SetValue(false);
+            }
+            Settings::values.enable_compute_pipelines.SetValue(true);
+            Settings::values.barrier_feedback_loops.SetValue(false);
+            if (Settings::values.vsync_mode.GetValue() == Settings::VSyncMode::Fifo) {
+                LOG_INFO(Core, "TotK: Setting VSync to Mailbox to prevent framerate halving");
+                Settings::values.vsync_mode.SetValue(Settings::VSyncMode::Mailbox);
+            }
+            break;
+        }
         default:
             break;
     }

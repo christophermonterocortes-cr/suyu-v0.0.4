@@ -101,6 +101,9 @@ enum class ThreadPriority : u32 {
 
 void SetCurrentThreadPriority(ThreadPriority new_priority);
 void SetCurrentThreadName(const char* name);
+void SetCurrentThreadHighQoS();
+uint64_t GetPerformanceCoresAffinityMask();
+void SetCurrentThreadPerformanceAffinity();
 void PinCurrentThreadToPerformanceCore(size_t core_id);
 
 } // namespace Common
