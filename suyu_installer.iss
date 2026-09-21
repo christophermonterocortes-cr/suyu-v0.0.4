@@ -4,7 +4,7 @@
 #define MyAppName "suyu"
 #define MyAppVersion "0.0.4"
 #define MyAppPublisher "suyu team"
-#define MyAppURL "https://github.com/suyu-emu/suyu-v0.0.4"
+#define MyAppURL "https://github.com/christophermonterocortes-cr/suyu-v0.0.4"
 #define MyAppExeName "suyu.exe"
 #define SourceDir "dist_bin"
 

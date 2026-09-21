@@ -243,7 +243,6 @@ void DeviceMemoryManager<Traits>::Map(DAddr address, VAddr virtual_address, size
         }
         impl->multi_dev_address.Register(new_dev, start_id);
     }
-    t_slot = {};
     if (track) {
         TrackContinuityImpl(address, virtual_address, size, asid);
     }
@@ -275,7 +274,6 @@ void DeviceMemoryManager<Traits>::Unmap(DAddr address, size_t size) {
             compressed_device_addr[phys_addr - 1] = new_start | MULTI_FLAG;
         }
     }
-    t_slot = {};
 }
 template <typename Traits>
 void DeviceMemoryManager<Traits>::TrackContinuityImpl(DAddr address, VAddr virtual_address,
@@ -399,6 +397,10 @@ void DeviceMemoryManager<Traits>::WalkBlock(DAddr addr, std::size_t size, auto o
             continue;
         }
         auto* mem_ptr = GetPointerFromRaw<u8>((PAddr(phys_addr - 1) << Memory::YUZU_PAGEBITS) + page_offset);
+        if (mem_ptr == nullptr) {
+            on_unmapped(copy_amount, current_vaddr);
+            continue;
+        }
         on_memory(copy_amount, mem_ptr);
     }
 }
@@ -408,22 +410,14 @@ void DeviceMemoryManager<Traits>::ReadBlock(DAddr address, void* dest_pointer, s
     device_inter->FlushRegion(address, size);
     const std::size_t page_offset = address & Memory::YUZU_PAGEMASK;
     if (size <= Memory::YUZU_PAGESIZE - page_offset) {
-        const DAddr guest_page = address & ~static_cast<DAddr>(Memory::YUZU_PAGEMASK);
-        for (size_t i = 0; i < 4; ++i) {
-            if (t_slot[i].guest_page == guest_page && t_slot[i].host_ptr != nullptr) {
-                std::memcpy(dest_pointer, t_slot[i].host_ptr + page_offset, size);
-                return;
-            }
-        }
-
         const std::size_t page_index = address >> Memory::YUZU_PAGEBITS;
         const auto phys_addr = tracked_entries[page_index].compressed_physical_ptr;
         if (phys_addr != 0) {
-            auto* const mem_ptr = GetPointerFromRaw<u8>((PAddr(phys_addr - 1) << Memory::YUZU_PAGEBITS));
-            t_slot[cache_cursor % t_slot.size()] = TranslationEntry{.guest_page = guest_page, .host_ptr = mem_ptr};
-            cache_cursor = (cache_cursor + 1) & 3U;
-            std::memcpy(dest_pointer, mem_ptr + page_offset, size);
-            return;
+            auto* const mem_ptr = GetPointerFromRaw<u8>((PAddr(phys_addr - 1) << Memory::YUZU_PAGEBITS) + page_offset);
+            if (mem_ptr != nullptr) {
+                std::memcpy(dest_pointer, mem_ptr, size);
+                return;
+            }
         }
     }
     WalkBlock(
@@ -436,7 +430,11 @@ void DeviceMemoryManager<Traits>::ReadBlock(DAddr address, void* dest_pointer, s
             std::memset(dest_pointer, 0, copy_amount);
         },
         [&](size_t copy_amount, const u8* const src_ptr) {
-            std::memcpy(dest_pointer, src_ptr, copy_amount);
+            if (src_ptr != nullptr) {
+                std::memcpy(dest_pointer, src_ptr, copy_amount);
+            } else {
+                std::memset(dest_pointer, 0, copy_amount);
+            }
         },
         [&](const std::size_t copy_amount) {
             dest_pointer = static_cast<u8*>(dest_pointer) + copy_amount;
@@ -454,7 +452,9 @@ void DeviceMemoryManager<Traits>::WriteBlock(DAddr address, const void* src_poin
                 current_vaddr, address, size);
         },
         [&](size_t copy_amount, u8* const dst_ptr) {
-            std::memcpy(dst_ptr, src_pointer, copy_amount);
+            if (dst_ptr != nullptr) {
+                std::memcpy(dst_ptr, src_pointer, copy_amount);
+            }
         },
         [&](const std::size_t copy_amount) {
             src_pointer = static_cast<const u8*>(src_pointer) + copy_amount;
@@ -466,22 +466,14 @@ template <typename Traits>
 void DeviceMemoryManager<Traits>::ReadBlockUnsafe(DAddr address, void* dest_pointer, size_t size) {
     const std::size_t page_offset = address & Memory::YUZU_PAGEMASK;
     if (size <= Memory::YUZU_PAGESIZE - page_offset) {
-        const DAddr guest_page = address & ~static_cast<DAddr>(Memory::YUZU_PAGEMASK);
-        for (size_t i = 0; i < 4; ++i) {
-            if (t_slot[i].guest_page == guest_page && t_slot[i].host_ptr != nullptr) {
-                std::memcpy(dest_pointer, t_slot[i].host_ptr + page_offset, size);
-                return;
-            }
-        }
-
         const std::size_t page_index = address >> Memory::YUZU_PAGEBITS;
         const auto phys_addr = tracked_entries[page_index].compressed_physical_ptr;
         if (phys_addr != 0) {
-            auto* const mem_ptr = GetPointerFromRaw<u8>((PAddr(phys_addr - 1) << Memory::YUZU_PAGEBITS));
-            t_slot[cache_cursor % t_slot.size()] = TranslationEntry{.guest_page = guest_page, .host_ptr = mem_ptr};
-            cache_cursor = (cache_cursor + 1) & 3U;
-            std::memcpy(dest_pointer, mem_ptr + page_offset, size);
-            return;
+            auto* const mem_ptr = GetPointerFromRaw<u8>((PAddr(phys_addr - 1) << Memory::YUZU_PAGEBITS) + page_offset);
+            if (mem_ptr != nullptr) {
+                std::memcpy(dest_pointer, mem_ptr, size);
+                return;
+            }
         }
     }
     WalkBlock(
@@ -494,7 +486,11 @@ void DeviceMemoryManager<Traits>::ReadBlockUnsafe(DAddr address, void* dest_poin
             std::memset(dest_pointer, 0, copy_amount);
         },
         [&](size_t copy_amount, const u8* const src_ptr) {
-            std::memcpy(dest_pointer, src_ptr, copy_amount);
+            if (src_ptr != nullptr) {
+                std::memcpy(dest_pointer, src_ptr, copy_amount);
+            } else {
+                std::memset(dest_pointer, 0, copy_amount);
+            }
         },
         [&](const std::size_t copy_amount) {
             dest_pointer = static_cast<u8*>(dest_pointer) + copy_amount;
@@ -513,7 +509,9 @@ void DeviceMemoryManager<Traits>::WriteBlockUnsafe(DAddr address, const void* sr
                 current_vaddr, address, size);
         },
         [&](size_t copy_amount, u8* const dst_ptr) {
-            std::memcpy(dst_ptr, src_pointer, copy_amount);
+            if (dst_ptr != nullptr) {
+                std::memcpy(dst_ptr, src_pointer, copy_amount);
+            }
         },
         [&](const std::size_t copy_amount) {
             src_pointer = static_cast<const u8*>(src_pointer) + copy_amount;
