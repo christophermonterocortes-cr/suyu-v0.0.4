@@ -9,6 +9,7 @@
 #include <array>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -123,6 +124,7 @@ public:
     static NcaID Generate();
 
 private:
+    mutable std::recursive_mutex mutex;
     VirtualDir dir;
 };
 
@@ -204,6 +206,7 @@ private:
                                 bool overwrite_if_exists, std::optional<NcaID> override_id = {});
     bool RawInstallYuzuMeta(const CNMT& cnmt);
 
+    mutable std::recursive_mutex mutex;
     VirtualDir dir;
     ContentProviderParsingFunction parser;
 
@@ -242,6 +245,7 @@ public:
 
     const ExternalContentProvider* GetExternalProvider() const;
     [[nodiscard]] inline const ContentProvider* GetSlotProvider(ContentProviderUnionSlot slot) const {
+        std::lock_guard lock(mutex);
         return providers[size_t(slot)];
     }
 
@@ -252,6 +256,7 @@ public:
 
     std::optional<ContentProviderUnionSlot> GetSlotForEntry(u64 title_id, ContentRecordType type) const;
 private:
+    mutable std::recursive_mutex mutex;
     std::array<ContentProvider*, size_t(ContentProviderUnionSlot::Count)> providers;
 };
 
@@ -281,6 +286,7 @@ public:
     VirtualFile GetEntryForVersion(u64 title_id, ContentRecordType type, u32 version) const;
 
 private:
+    mutable std::recursive_mutex mutex;
     std::map<std::tuple<TitleType, ContentRecordType, u64>, VirtualFile> entries;
     std::vector<ExternalUpdateEntry> multi_version_entries;
 };
@@ -311,6 +317,7 @@ private:
     void ProcessNSP(const VirtualFile& file);
     void ProcessXCI(const VirtualFile& file);
 
+    mutable std::recursive_mutex mutex;
     std::vector<VirtualDir> load_dirs;
     ankerl::unordered_dense::map<std::tuple<u64, ContentRecordType, TitleType>, VirtualFile> entries;
     ankerl::unordered_dense::map<u64, u32> versions;

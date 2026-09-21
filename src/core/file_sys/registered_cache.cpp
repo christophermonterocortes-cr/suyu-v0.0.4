@@ -67,20 +67,16 @@ static std::string GetRelativePathFromNcaID(const std::array<u8, 16>& nca_id, bo
     const auto nca_str = Common::HexToString(nca_id, second_hex_upper);
 
     if (!within_two_digit) {
-        const auto format_str = fmt::runtime(cnmt_suffix ? "{}.cnmt.nca" : "/{}.nca");
-        return fmt::format(format_str, nca_str);
+        return cnmt_suffix ? fmt::format("{}.cnmt.nca", nca_str)
+                           : fmt::format("/{}.nca", nca_str);
     }
 
     Core::Crypto::SHA256Hash hash{};
     u32 hash_len = 0;
     EVP_Digest(nca_id.data(), nca_id.size(), hash.data(), &hash_len, EVP_sha256(), nullptr);
 
-    const auto format_str =
-        fmt::runtime(cnmt_suffix ? "/000000{:02X}/{}.cnmt.nca" : "/000000{:02X}/{}.nca");
-
-    LOG_DEBUG(Loader, "Decoded {} bytes, nca id {}", hash_len, nca_str);
-
-    return fmt::format(format_str, hash[0], nca_str);
+    return cnmt_suffix ? fmt::format("/000000{:02X}/{}.cnmt.nca", hash[0], nca_str)
+                       : fmt::format("/000000{:02X}/{}.nca", hash[0], nca_str);
 }
 
 static std::string GetCNMTName(TitleType type, u64 title_id) {
@@ -351,6 +347,7 @@ std::vector<ContentProviderEntry> ContentProvider::ListEntries() const {
 PlaceholderCache::PlaceholderCache(VirtualDir dir_) : dir(std::move(dir_)) {}
 
 bool PlaceholderCache::Create(const NcaID& id, u64 size) const {
+    std::lock_guard lock(mutex);
     const auto path = GetRelativePathFromNcaID(id, false, true, false);
 
     if (dir->GetFileRelative(path) != nullptr) {
@@ -360,8 +357,6 @@ bool PlaceholderCache::Create(const NcaID& id, u64 size) const {
     Core::Crypto::SHA256Hash hash{};
     u32 hash_len = 0;
     EVP_Digest(id.data(), id.size(), hash.data(), &hash_len, EVP_sha256(), nullptr);
-
-    LOG_DEBUG(Loader, "Decoded {} bytes, nca id {}", hash_len, id);
 
     const auto dirname = fmt::format("000000{:02X}", hash[0]);
 
@@ -379,6 +374,7 @@ bool PlaceholderCache::Create(const NcaID& id, u64 size) const {
 }
 
 bool PlaceholderCache::Delete(const NcaID& id) const {
+    std::lock_guard lock(mutex);
     const auto path = GetRelativePathFromNcaID(id, false, true, false);
 
     if (dir->GetFileRelative(path) == nullptr) {
@@ -388,8 +384,6 @@ bool PlaceholderCache::Delete(const NcaID& id) const {
     Core::Crypto::SHA256Hash hash{};
     u32 hash_len = 0;
     EVP_Digest(id.data(), id.size(), hash.data(), &hash_len, EVP_sha256(), nullptr);
-
-    LOG_DEBUG(Loader, "Decoded {} bytes, nca id {}", hash_len, id);
 
     const auto dirname = fmt::format("000000{:02X}", hash[0]);
 
@@ -401,12 +395,14 @@ bool PlaceholderCache::Delete(const NcaID& id) const {
 }
 
 bool PlaceholderCache::Exists(const NcaID& id) const {
+    std::lock_guard lock(mutex);
     const auto path = GetRelativePathFromNcaID(id, false, true, false);
 
     return dir->GetFileRelative(path) != nullptr;
 }
 
 bool PlaceholderCache::Write(const NcaID& id, u64 offset, const std::vector<u8>& data) const {
+    std::lock_guard lock(mutex);
     const auto path = GetRelativePathFromNcaID(id, false, true, false);
     const auto file = dir->GetFileRelative(path);
 
@@ -418,6 +414,7 @@ bool PlaceholderCache::Write(const NcaID& id, u64 offset, const std::vector<u8>&
 
 bool PlaceholderCache::Register(RegisteredCache* cache, const NcaID& placeholder,
                                 const NcaID& install) const {
+    std::lock_guard lock(mutex);
     const auto path = GetRelativePathFromNcaID(placeholder, false, true, false);
     const auto file = dir->GetFileRelative(path);
 
@@ -433,10 +430,12 @@ bool PlaceholderCache::Register(RegisteredCache* cache, const NcaID& placeholder
 }
 
 bool PlaceholderCache::CleanAll() const {
+    std::lock_guard lock(mutex);
     return dir->GetParentDirectory()->CleanSubdirectoryRecursive(dir->GetName());
 }
 
 std::optional<std::array<u8, 0x10>> PlaceholderCache::GetRightsID(const NcaID& id) const {
+    std::lock_guard lock(mutex);
     const auto path = GetRelativePathFromNcaID(id, false, true, false);
     const auto file = dir->GetFileRelative(path);
 
@@ -458,6 +457,7 @@ std::optional<std::array<u8, 0x10>> PlaceholderCache::GetRightsID(const NcaID& i
 }
 
 u64 PlaceholderCache::Size(const NcaID& id) const {
+    std::lock_guard lock(mutex);
     const auto path = GetRelativePathFromNcaID(id, false, true, false);
     const auto file = dir->GetFileRelative(path);
 
@@ -468,6 +468,7 @@ u64 PlaceholderCache::Size(const NcaID& id) const {
 }
 
 bool PlaceholderCache::SetSize(const NcaID& id, u64 new_size) const {
+    std::lock_guard lock(mutex);
     const auto path = GetRelativePathFromNcaID(id, false, true, false);
     const auto file = dir->GetFileRelative(path);
 
@@ -478,6 +479,7 @@ bool PlaceholderCache::SetSize(const NcaID& id, u64 new_size) const {
 }
 
 std::vector<NcaID> PlaceholderCache::List() const {
+    std::lock_guard lock(mutex);
     std::vector<NcaID> out;
     for (const auto& sdir : dir->GetSubdirectories()) {
         for (const auto& file : sdir->GetFiles()) {
@@ -503,6 +505,7 @@ NcaID PlaceholderCache::Generate() {
 
 VirtualFile RegisteredCache::OpenFileOrDirectoryConcat(const VirtualDir& open_dir,
                                                        std::string_view path) const {
+    std::lock_guard lock(mutex);
     if (open_dir == nullptr) {
         return nullptr;
     }
@@ -546,24 +549,8 @@ VirtualFile RegisteredCache::OpenFileOrDirectoryConcat(const VirtualDir& open_di
 }
 
 VirtualFile RegisteredCache::GetFileAtID(NcaID id) const {
+    std::lock_guard lock(mutex);
     VirtualFile file;
-    // All eight combinations of the three layout choices:
-    // (bit 2 = lower/uppercase, bit 1 = not within/within a two-digit dir,
-    //  bit 0 = .cnmt suffix)
-    //
-    // This used to skip every odd index except 7 - i.e. the .cnmt.nca suffix was
-    // only ever tried at the cache root, never inside a two-digit directory.
-    // But that is precisely where meta NCAs are stored:
-    // GetRelativePathFromNcaID's own format string for the cnmt case is
-    // "/000000{:02X}/{}.cnmt.nca", and it is what RegisteredCache::InstallEntry
-    // writes. The result was that every meta NCA in NAND was unreachable, so
-    // ProcessFiles bailed at `file == nullptr` before registering anything and
-    // no installed update or DLC ever appeared in the cache - silently, since
-    // the miss looks identical to nothing being installed.
-    //
-    // Concretely: with a newer update installed to NAND,
-    // the union fell through to the frontend's copy of the cartridge contents
-    // and applied the A32 on-cart update instead, so the title ran 32-bit.
     for (u8 i = 0; i < 8; ++i) {
         const auto path =
             GetRelativePathFromNcaID(id, (i & 0b100) == 0, (i & 0b010) == 0, (i & 0b001) == 0b001);
@@ -593,6 +580,7 @@ static std::optional<NcaID> CheckMapForContentRecord(const ankerl::unordered_den
 
 std::optional<NcaID> RegisteredCache::GetNcaIDFromMetadata(u64 title_id,
                                                            ContentRecordType type) const {
+    std::lock_guard lock(mutex);
     if (type == ContentRecordType::Meta && meta_id.find(title_id) != meta_id.end())
         return meta_id.at(title_id);
 
@@ -603,6 +591,7 @@ std::optional<NcaID> RegisteredCache::GetNcaIDFromMetadata(u64 title_id,
 }
 
 std::vector<NcaID> RegisteredCache::AccumulateFiles() const {
+    std::lock_guard lock(mutex);
     std::vector<NcaID> ids;
     for (const auto& d2_dir : dir->GetSubdirectories()) {
         if (FollowsNcaIdFormat(d2_dir->GetName())) {
@@ -639,6 +628,7 @@ std::vector<NcaID> RegisteredCache::AccumulateFiles() const {
 }
 
 void RegisteredCache::ProcessFiles(const std::vector<NcaID>& ids) {
+    std::lock_guard lock(mutex);
     for (const auto& id : ids) {
         const auto file = GetFileAtID(id);
 
@@ -700,6 +690,7 @@ void RegisteredCache::ProcessFiles(const std::vector<NcaID>& ids) {
 }
 
 void RegisteredCache::AccumulateYuzuMeta() {
+    std::lock_guard lock(mutex);
     const auto meta_dir = dir->GetSubdirectory("yuzu_meta");
     if (meta_dir == nullptr) {
         return;
@@ -716,6 +707,7 @@ void RegisteredCache::AccumulateYuzuMeta() {
 }
 
 void RegisteredCache::Refresh() {
+    std::lock_guard lock(mutex);
     if (dir == nullptr) {
         return;
     }
@@ -733,15 +725,18 @@ RegisteredCache::RegisteredCache(VirtualDir dir_, ContentProviderParsingFunction
 RegisteredCache::~RegisteredCache() = default;
 
 bool RegisteredCache::HasEntry(u64 title_id, ContentRecordType type) const {
+    std::lock_guard lock(mutex);
     return GetEntryRaw(title_id, type) != nullptr;
 }
 
 VirtualFile RegisteredCache::GetEntryUnparsed(u64 title_id, ContentRecordType type) const {
+    std::lock_guard lock(mutex);
     const auto id = GetNcaIDFromMetadata(title_id, type);
     return id ? GetFileAtID(*id) : nullptr;
 }
 
 std::optional<u32> RegisteredCache::GetEntryVersion(u64 title_id) const {
+    std::lock_guard lock(mutex);
     const auto meta_iter = meta.find(title_id);
     if (meta_iter != meta.cend()) {
         return meta_iter->second.GetTitleVersion();
@@ -756,11 +751,13 @@ std::optional<u32> RegisteredCache::GetEntryVersion(u64 title_id) const {
 }
 
 VirtualFile RegisteredCache::GetEntryRaw(u64 title_id, ContentRecordType type) const {
+    std::lock_guard lock(mutex);
     const auto id = GetNcaIDFromMetadata(title_id, type);
     return id ? parser(GetFileAtID(*id), *id) : nullptr;
 }
 
 std::unique_ptr<NCA> RegisteredCache::GetEntry(u64 title_id, ContentRecordType type) const {
+    std::lock_guard lock(mutex);
     const auto raw = GetEntryRaw(title_id, type);
     if (raw == nullptr)
         return nullptr;
@@ -771,6 +768,7 @@ template <typename T>
 void RegisteredCache::IterateAllMetadata(
     std::vector<T>& out, std::function<T(const CNMT&, const ContentRecord&)> proc,
     std::function<bool(const CNMT&, const ContentRecord&)> filter) const {
+    std::lock_guard lock(mutex);
     for (const auto& kv : meta) {
         const auto& cnmt = kv.second;
         if (filter(cnmt, EMPTY_META_CONTENT_RECORD))
@@ -794,6 +792,7 @@ void RegisteredCache::IterateAllMetadata(
 std::vector<ContentProviderEntry> RegisteredCache::ListEntriesFilter(
     std::optional<TitleType> title_type, std::optional<ContentRecordType> record_type,
     std::optional<u64> title_id) const {
+    std::lock_guard lock(mutex);
     std::vector<ContentProviderEntry> out;
     IterateAllMetadata<ContentProviderEntry>(
         out,
@@ -827,6 +826,7 @@ InstallResult RegisteredCache::InstallEntry(const XCI& xci, bool overwrite_if_ex
 
 InstallResult RegisteredCache::InstallEntry(const NSP& nsp, bool overwrite_if_exists,
                                             const VfsCopyFunction& copy) {
+    std::lock_guard lock(mutex);
     const auto ncas = nsp.GetNCAsCollapsed();
     const auto meta_iter = std::find_if(ncas.begin(), ncas.end(), [](const auto& nca) {
         return nca->GetType() == NCAContentType::Meta;
@@ -910,6 +910,7 @@ InstallResult RegisteredCache::InstallEntry(const NSP& nsp, bool overwrite_if_ex
 
 InstallResult RegisteredCache::InstallEntry(const NCA& nca, TitleType type,
                                             bool overwrite_if_exists, const VfsCopyFunction& copy) {
+    std::lock_guard lock(mutex);
     const CNMTHeader header{
         .title_id = nca.GetTitleId(),
         .title_version = 0,
@@ -944,6 +945,7 @@ InstallResult RegisteredCache::InstallEntry(const NCA& nca, TitleType type,
 InstallResult RegisteredCache::InstallEntry(const NCA& nca, const CNMTHeader& base_header,
                                             const ContentRecord& base_record,
                                             bool overwrite_if_exists, const VfsCopyFunction& copy) {
+    std::lock_guard lock(mutex);
     const CNMTHeader header{
         .title_id = nca.GetTitleId(),
         .title_version = base_header.title_version,
@@ -967,6 +969,7 @@ InstallResult RegisteredCache::InstallEntry(const NCA& nca, const CNMTHeader& ba
 }
 
 bool RegisteredCache::RemoveExistingEntry(u64 title_id) const {
+    std::lock_guard lock(mutex);
     bool removed_data = false;
 
     const auto delete_nca = [this](const NcaID& id) {
@@ -1031,6 +1034,7 @@ bool RegisteredCache::RemoveExistingEntry(u64 title_id) const {
 InstallResult RegisteredCache::RawInstallNCA(const NCA& nca, const VfsCopyFunction& copy,
                                              bool overwrite_if_exists,
                                              std::optional<NcaID> override_id) {
+    std::lock_guard lock(mutex);
     const auto in = nca.GetBaseFile();
     Core::Crypto::SHA256Hash hash{};
 
@@ -1075,6 +1079,7 @@ InstallResult RegisteredCache::RawInstallNCA(const NCA& nca, const VfsCopyFuncti
 }
 
 bool RegisteredCache::RawInstallYuzuMeta(const CNMT& cnmt) {
+    std::lock_guard lock(mutex);
     // Reasoning behind this method can be found in the comment for InstallEntry, NCA overload.
     const auto meta_dir = dir->CreateDirectoryRelative("yuzu_meta");
     const auto filename = GetCNMTName(cnmt.GetType(), cnmt.GetTitleID());
@@ -1103,16 +1108,19 @@ bool RegisteredCache::RawInstallYuzuMeta(const CNMT& cnmt) {
 ContentProviderUnion::~ContentProviderUnion() = default;
 
 void ContentProviderUnion::SetSlot(ContentProviderUnionSlot slot, ContentProvider* provider) {
+    std::lock_guard lock(mutex);
     providers[size_t(slot)] = provider;
 }
 
 void ContentProviderUnion::Refresh() {
+    std::lock_guard lock(mutex);
     for (auto e : providers)
         if (e != nullptr)
             e->Refresh();
 }
 
 bool ContentProviderUnion::HasEntry(u64 title_id, ContentRecordType type) const {
+    std::lock_guard lock(mutex);
     for (auto const e : providers)
         if (e && e->HasEntry(title_id, type))
             return true;
@@ -1120,6 +1128,7 @@ bool ContentProviderUnion::HasEntry(u64 title_id, ContentRecordType type) const 
 }
 
 std::optional<u32> ContentProviderUnion::GetEntryVersion(u64 title_id) const {
+    std::lock_guard lock(mutex);
     for (auto const e : providers) {
         if (e == nullptr)
             continue;
@@ -1130,6 +1139,7 @@ std::optional<u32> ContentProviderUnion::GetEntryVersion(u64 title_id) const {
 }
 
 VirtualFile ContentProviderUnion::GetEntryUnparsed(u64 title_id, ContentRecordType type) const {
+    std::lock_guard lock(mutex);
     for (auto const e : providers) {
         if (e == nullptr)
             continue;
@@ -1140,6 +1150,7 @@ VirtualFile ContentProviderUnion::GetEntryUnparsed(u64 title_id, ContentRecordTy
 }
 
 VirtualFile ContentProviderUnion::GetEntryRaw(u64 title_id, ContentRecordType type) const {
+    std::lock_guard lock(mutex);
     for (auto const e : providers) {
         if (e == nullptr)
             continue;
@@ -1150,6 +1161,7 @@ VirtualFile ContentProviderUnion::GetEntryRaw(u64 title_id, ContentRecordType ty
 }
 
 std::unique_ptr<NCA> ContentProviderUnion::GetEntry(u64 title_id, ContentRecordType type) const {
+    std::lock_guard lock(mutex);
     for (auto const e : providers) {
         if (e == nullptr)
             continue;
@@ -1160,6 +1172,7 @@ std::unique_ptr<NCA> ContentProviderUnion::GetEntry(u64 title_id, ContentRecordT
 }
 
 std::vector<ContentProviderEntry> ContentProviderUnion::ListEntriesFilter(std::optional<TitleType> title_type, std::optional<ContentRecordType> record_type, std::optional<u64> title_id) const {
+    std::lock_guard lock(mutex);
     std::vector<ContentProviderEntry> out;
     for (auto const& e : providers) {
         if (e != nullptr) {
@@ -1173,6 +1186,7 @@ std::vector<ContentProviderEntry> ContentProviderUnion::ListEntriesFilter(std::o
 }
 
 std::vector<std::pair<ContentProviderUnionSlot, ContentProviderEntry>> ContentProviderUnion::ListEntriesFilterOrigin(std::optional<ContentProviderUnionSlot> origin, std::optional<TitleType> title_type, std::optional<ContentRecordType> record_type, std::optional<u64> title_id) const {
+    std::lock_guard lock(mutex);
     std::vector<std::pair<ContentProviderUnionSlot, ContentProviderEntry>> out;
 
     for (size_t i = 0; i < providers.size(); ++i) {
@@ -1193,6 +1207,7 @@ std::vector<std::pair<ContentProviderUnionSlot, ContentProviderEntry>> ContentPr
 }
 
 std::optional<ContentProviderUnionSlot> ContentProviderUnion::GetSlotForEntry(u64 title_id, ContentRecordType type) const {
+    std::lock_guard lock(mutex);
     for (size_t i = 0; i < providers.size(); ++i) {
         auto const& e = providers[i];
         if (e != nullptr && e->HasEntry(title_id, type))
@@ -1202,18 +1217,21 @@ std::optional<ContentProviderUnionSlot> ContentProviderUnion::GetSlotForEntry(u6
 }
 
 const ExternalContentProvider* ContentProviderUnion::GetExternalProvider() const {
+    std::lock_guard lock(mutex);
     return static_cast<const ExternalContentProvider*>(providers[size_t(ContentProviderUnionSlot::External)]);
 }
 
 ManualContentProvider::~ManualContentProvider() = default;
 
 void ManualContentProvider::AddEntry(TitleType title_type, ContentRecordType content_type, u64 title_id, VirtualFile file) {
+    std::lock_guard lock(mutex);
     entries.insert_or_assign({title_type, content_type, title_id}, file);
 }
 
 void ManualContentProvider::AddEntryWithVersion(TitleType title_type, ContentRecordType content_type,
                                                 u64 title_id, u32 version,
                                                 const std::string& version_string, VirtualFile file) {
+    std::lock_guard lock(mutex);
     if (title_type == TitleType::Update) {
         auto it = std::find_if(multi_version_entries.begin(), multi_version_entries.end(), [title_id, version](const ExternalUpdateEntry& entry) {
             return entry.title_id == title_id && entry.version == version;
@@ -1254,6 +1272,7 @@ void ManualContentProvider::AddEntryWithVersion(TitleType title_type, ContentRec
 
 bool ManualContentProvider::AddEntriesFromContainer(VirtualFile file, bool only_content,
                                                     std::optional<u64> base_program_id) {
+    std::lock_guard lock(mutex);
     const auto nsp = OpenContainerAsNsp(file, Loader::FileType::Unknown);
     if (!nsp) {
         return false;
@@ -1273,6 +1292,7 @@ bool ManualContentProvider::AddEntriesFromContainer(VirtualFile file, bool only_
 }
 
 void ManualContentProvider::ClearAllEntries() {
+    std::lock_guard lock(mutex);
     entries.clear();
     multi_version_entries.clear();
 }
@@ -1292,6 +1312,7 @@ VirtualFile ManualContentProvider::GetEntryUnparsed(u64 title_id, ContentRecordT
 }
 
 VirtualFile ManualContentProvider::GetEntryRaw(u64 title_id, ContentRecordType type) const {
+    std::lock_guard lock(mutex);
     const auto iter =
         std::find_if(entries.begin(), entries.end(), [title_id, type](const auto& entry) {
             const auto content_type = std::get<1>(entry.first);
@@ -1313,6 +1334,7 @@ std::unique_ptr<NCA> ManualContentProvider::GetEntry(u64 title_id, ContentRecord
 std::vector<ContentProviderEntry> ManualContentProvider::ListEntriesFilter(
     std::optional<TitleType> title_type, std::optional<ContentRecordType> record_type,
     std::optional<u64> title_id) const {
+    std::lock_guard lock(mutex);
     std::vector<ContentProviderEntry> out;
 
     for (const auto& entry : entries) {
@@ -1330,6 +1352,7 @@ std::vector<ContentProviderEntry> ManualContentProvider::ListEntriesFilter(
 }
 
 std::vector<ExternalUpdateEntry> ManualContentProvider::ListUpdateVersions(u64 title_id) const {
+    std::lock_guard lock(mutex);
     std::vector<ExternalUpdateEntry> out;
 
     for (const auto& entry : multi_version_entries) {
@@ -1346,6 +1369,7 @@ std::vector<ExternalUpdateEntry> ManualContentProvider::ListUpdateVersions(u64 t
 }
 
 VirtualFile ManualContentProvider::GetEntryForVersion(u64 title_id, ContentRecordType type, u32 version) const {
+    std::lock_guard lock(mutex);
     for (const auto& entry : multi_version_entries) {
         if (entry.title_id == title_id && entry.version == version) {
             if (auto const p = entry.files[size_t(type)])
@@ -1363,6 +1387,7 @@ ExternalContentProvider::ExternalContentProvider(std::vector<VirtualDir> load_di
 ExternalContentProvider::~ExternalContentProvider() = default;
 
 void ExternalContentProvider::AddDirectory(VirtualDir directory) {
+    std::lock_guard lock(mutex);
     if (directory != nullptr) {
         load_dirs.push_back(std::move(directory));
         ScanDirectory(load_dirs.back());
@@ -1370,6 +1395,7 @@ void ExternalContentProvider::AddDirectory(VirtualDir directory) {
 }
 
 void ExternalContentProvider::ClearDirectories() {
+    std::lock_guard lock(mutex);
     load_dirs.clear();
     entries.clear();
     versions.clear();
@@ -1377,6 +1403,7 @@ void ExternalContentProvider::ClearDirectories() {
 }
 
 void ExternalContentProvider::Refresh() {
+    std::lock_guard lock(mutex);
     entries.clear();
     versions.clear();
     multi_version_entries.clear();
@@ -1388,6 +1415,7 @@ void ExternalContentProvider::Refresh() {
 }
 
 void ExternalContentProvider::ScanDirectory(const VirtualDir& dir) {
+    std::lock_guard lock(mutex);
     if (dir == nullptr) {
         return;
     }
@@ -1415,6 +1443,7 @@ void ExternalContentProvider::ScanDirectory(const VirtualDir& dir) {
 }
 
 void ExternalContentProvider::ProcessNSP(const VirtualFile& file) {
+    std::lock_guard lock(mutex);
     const auto nsp = OpenContainerAsNsp(file, Loader::FileType::NSP);
     if (!nsp) {
         return;
@@ -1425,6 +1454,7 @@ void ExternalContentProvider::ProcessNSP(const VirtualFile& file) {
 }
 
 void ExternalContentProvider::ProcessXCI(const VirtualFile& file) {
+    std::lock_guard lock(mutex);
     const auto nsp = OpenContainerAsNsp(file, Loader::FileType::XCI);
     if (!nsp) {
         return;
@@ -1438,6 +1468,7 @@ bool ExternalContentProvider::HasEntry(u64 title_id, ContentRecordType type) con
 }
 
 std::optional<u32> ExternalContentProvider::GetEntryVersion(u64 title_id) const {
+    std::lock_guard lock(mutex);
     const auto it = versions.find(title_id);
     if (it != versions.end()) {
         return it->second;
@@ -1450,6 +1481,7 @@ VirtualFile ExternalContentProvider::GetEntryUnparsed(u64 title_id, ContentRecor
 }
 
 VirtualFile ExternalContentProvider::GetEntryRaw(u64 title_id, ContentRecordType type) const {
+    std::lock_guard lock(mutex);
     // Try to find in AOC (DLC) entries
     {
         const auto it = entries.find({title_id, type, TitleType::AOC});
@@ -1481,6 +1513,7 @@ std::unique_ptr<NCA> ExternalContentProvider::GetEntry(u64 title_id,
 std::vector<ContentProviderEntry> ExternalContentProvider::ListEntriesFilter(
     std::optional<TitleType> title_type, std::optional<ContentRecordType> record_type,
     std::optional<u64> title_id) const {
+    std::lock_guard lock(mutex);
     std::vector<ContentProviderEntry> out;
 
     for (const auto& [key, file] : entries) {
@@ -1499,6 +1532,7 @@ std::vector<ContentProviderEntry> ExternalContentProvider::ListEntriesFilter(
 }
 
 std::vector<ExternalUpdateEntry> ExternalContentProvider::ListUpdateVersions(u64 title_id) const {
+    std::lock_guard lock(mutex);
     std::vector<ExternalUpdateEntry> out;
 
     for (const auto& entry : multi_version_entries) {
@@ -1515,6 +1549,7 @@ std::vector<ExternalUpdateEntry> ExternalContentProvider::ListUpdateVersions(u64
 }
 
 VirtualFile ExternalContentProvider::GetEntryForVersion(u64 title_id, ContentRecordType type, u32 version) const {
+    std::lock_guard lock(mutex);
     for (const auto& entry : multi_version_entries)
         if (entry.title_id == title_id && entry.version == version)
             if (auto const p = entry.files[size_t(type)])
